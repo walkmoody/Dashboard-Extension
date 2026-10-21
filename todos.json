@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "classes": [
+    { "id": "cs5368", "name": "CS-5368 Intelligent Systems" },
+    { "id": "cs5342", "name": "CS-5342 Network Security" },
+    { "id": "cs5373", "name": "CS-5373 Software Modeling & Architecture" },
+    { "id": "cs5370", "name": "CS-5370 Machine Learning" }
+  ],
+  "tasks": []
+}

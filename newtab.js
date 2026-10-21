@@ -235,15 +235,15 @@ function initVariableProximity(containerEl, {
 function initSplashCursor({
   SIM_RESOLUTION = 128,
   DYE_RESOLUTION = 1440,
-  DENSITY_DISSIPATION = 3.5,
+  DENSITY_DISSIPATION = 2.5,
   VELOCITY_DISSIPATION = 2,
   PRESSURE = 0.1,
-  PRESSURE_ITERATIONS = 20,
-  CURL = 2,
+  PRESSURE_ITERATIONS = 5,
+  CURL = 1,
   SPLAT_RADIUS = 0.2,
-  SPLAT_FORCE = 3000,
+  SPLAT_FORCE = 1100,
   SHADING = true,
-  COLOR_UPDATE_SPEED = 10,
+  COLOR_UPDATE_SPEED = 3,
   BACK_COLOR = { r: 0, g: 0, b: 0 },
   TRANSPARENT = true
 } = {}) {
@@ -803,6 +803,311 @@ function initSplashCursor({
   updateFrame();
 }
 
+// ── Todo list ────────────────────────────────────────────────────────────────
+
+let todoState = { classes: [], tasks: [] };
+const expandedClasses = new Set();
+const expandedDoneSections = new Set();
+
+const PRIORITY_ORDER  = { high: 0, medium: 1, low: 2, none: 3 };
+const PRIORITY_COLORS = { high: '#ef4444', medium: '#f59e0b', low: '#22c55e', none: 'transparent' };
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+async function loadTodoState() {
+  const stored = await chrome.storage.local.get('todos');
+  let seed = null;
+  try {
+    const resp = await fetch(chrome.runtime.getURL('todos.json'));
+    seed = await resp.json();
+  } catch {}
+
+  if (stored.todos) {
+    todoState = stored.todos;
+    // Replace classes when todos.json ships a newer class list (e.g. new semester)
+    if (seed && (seed.version || 0) > (todoState.version || 0)) {
+      todoState.classes = seed.classes;
+      todoState.version = seed.version;
+      await saveTodoState();
+    }
+  } else {
+    todoState = seed || { classes: [], tasks: [] };
+  }
+}
+
+async function saveTodoState() {
+  await chrome.storage.local.set({ todos: todoState });
+}
+
+function formatDue(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d - today) / 86400000);
+  if (diff === 0) return 'today';
+  if (diff === 1) return 'tmrw';
+  if (diff < 0) return `${Math.abs(diff)}d ago`;
+  if (diff <= 6) return `${diff}d`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function renderTodos() {
+  const container = document.getElementById('todoList');
+  if (!container) return;
+
+  container.innerHTML = todoState.classes.map(cls => {
+    const tasks = todoState.tasks.filter(t => t.classId === cls.id);
+    const pending = tasks.filter(t => !t.done).sort((a, b) => {
+      const pd = PRIORITY_ORDER[a.priority ?? 'none'] - PRIORITY_ORDER[b.priority ?? 'none'];
+      if (pd !== 0) return pd;
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+    const done = tasks.filter(t => t.done);
+    const isOpen = expandedClasses.has(cls.id);
+    const doneOpen = expandedDoneSections.has(cls.id);
+
+    const taskRow = task => {
+      const dot = (task.priority && task.priority !== 'none')
+        ? `<span class="todo-priority-dot" style="background:${PRIORITY_COLORS[task.priority]}"></span>`
+        : '';
+      const due = task.dueDate
+        ? `<span class="todo-due">${formatDue(task.dueDate)}</span>`
+        : '';
+      return `
+        <div class="todo-task${task.done ? ' done' : ''}" data-task-id="${task.id}">
+          <button class="todo-task-toggle" data-action="toggle-task" data-id="${task.id}" title="mark done"></button>
+          ${dot}
+          <span class="todo-task-text" data-id="${task.id}">${escapeHtml(task.title)}</span>
+          ${due}
+          <button class="todo-del-task" data-action="delete-task" data-id="${task.id}" title="delete">×</button>
+        </div>
+      `;
+    };
+
+    const doneSection = done.length > 0 ? `
+      <div class="todo-done-header" data-action="toggle-done-section" data-id="${cls.id}">
+        <span class="todo-done-arrow">${doneOpen ? '▾' : '▸'}</span>
+        <span>done (${done.length})</span>
+      </div>
+      <div class="todo-done-tasks${doneOpen ? '' : ' hidden'}">
+        ${done.map(taskRow).join('')}
+      </div>
+    ` : '';
+
+    return `
+      <div class="todo-class" data-class-id="${cls.id}">
+        <div class="todo-class-row" data-action="toggle-class" data-id="${cls.id}" draggable="true">
+          <span class="todo-class-icon">&#8801;</span>
+          <span class="todo-class-name">${escapeHtml(cls.name)}</span>
+          ${pending.length > 0 ? `<span class="todo-badge">${pending.length}</span>` : ''}
+        </div>
+        <div class="todo-tasks${isOpen ? '' : ' hidden'}">
+          ${pending.map(taskRow).join('')}
+          ${doneSection}
+          <div class="todo-add-row">
+            <input class="todo-input" data-class-id="${cls.id}" placeholder="add task…">
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Context menu (priority / due date) ──────────────────────────────────────
+
+function removeContextMenu() {
+  document.querySelector('.todo-context-menu')?.remove();
+}
+
+function showContextMenu(x, y, taskId) {
+  removeContextMenu();
+  const task = todoState.tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  const menu = document.createElement('div');
+  menu.className = 'todo-context-menu';
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+
+  const priorities = ['high', 'medium', 'low', 'none'];
+  menu.innerHTML = `
+    <div class="tcm-section">Priority</div>
+    ${priorities.map(p => `
+      <div class="tcm-item${(task.priority ?? 'none') === p ? ' active' : ''}" data-set-priority="${p}">
+        <span class="tcm-dot" style="background:${PRIORITY_COLORS[p]}"></span>${p}
+      </div>
+    `).join('')}
+    <div class="tcm-section">Due date</div>
+    <input class="tcm-date" type="date" value="${task.dueDate ?? new Date().toISOString().slice(0, 10)}">
+    ${task.dueDate ? '<div class="tcm-item" data-clear-date="1">Clear date</div>' : ''}
+  `;
+
+  document.body.appendChild(menu);
+
+  // Keep menu inside viewport
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth)  menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+  if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+
+  menu.querySelector('.tcm-date').addEventListener('change', async ev => {
+    task.dueDate = ev.target.value || null;
+    await saveTodoState(); renderTodos(); removeContextMenu();
+  });
+
+  menu.addEventListener('click', async ev => {
+    const setPri = ev.target.closest('[data-set-priority]');
+    if (setPri) {
+      task.priority = setPri.dataset.setPriority;
+      await saveTodoState(); renderTodos(); removeContextMenu();
+      return;
+    }
+    if (ev.target.closest('[data-clear-date]')) {
+      task.dueDate = null;
+      await saveTodoState(); renderTodos(); removeContextMenu();
+    }
+  });
+
+  menu.addEventListener('click', e => e.stopPropagation());
+  menu.addEventListener('mousedown', e => e.stopPropagation());
+  setTimeout(() => document.addEventListener('click', removeContextMenu, { once: true }), 0);
+}
+
+// ── Drag state ───────────────────────────────────────────────────────────────
+
+let _dragSrcClassId = null;
+
+function initTodos() {
+  const list = document.getElementById('todoList');
+
+  // ── click delegation ──────────────────────────────────────────────────────
+  list.addEventListener('click', async e => {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    const { action, id } = target.dataset;
+
+    if (action === 'toggle-class') {
+      if (e.target.closest('[data-action="delete-class"]')) return;
+      expandedClasses.has(id) ? expandedClasses.delete(id) : expandedClasses.add(id);
+      renderTodos();
+    }
+
+    if (action === 'delete-class') {
+      todoState.classes = todoState.classes.filter(c => c.id !== id);
+      todoState.tasks   = todoState.tasks.filter(t => t.classId !== id);
+      expandedClasses.delete(id);
+      await saveTodoState(); renderTodos();
+    }
+
+    if (action === 'delete-task') {
+      todoState.tasks = todoState.tasks.filter(t => t.id !== id);
+      await saveTodoState(); renderTodos();
+    }
+
+    if (action === 'toggle-done-section') {
+      expandedDoneSections.has(id) ? expandedDoneSections.delete(id) : expandedDoneSections.add(id);
+      renderTodos();
+    }
+  });
+
+  list.addEventListener('click', async e => {
+    const target = e.target.closest('.todo-task-toggle[data-action="toggle-task"]');
+    if (!target) return;
+    const task = todoState.tasks.find(t => t.id === target.dataset.id);
+    if (task) { task.done = !task.done; await saveTodoState(); renderTodos(); }
+  });
+
+  // ── inline editing (double-click) ─────────────────────────────────────────
+  list.addEventListener('dblclick', e => {
+    const span = e.target.closest('.todo-task-text');
+    if (!span) return;
+    const taskId = span.dataset.id;
+    const task = todoState.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const input = document.createElement('input');
+    input.className = 'todo-input todo-inline-edit';
+    input.value = task.title;
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const commit = async () => {
+      const val = input.value.trim();
+      if (val) task.title = val;
+      await saveTodoState(); renderTodos();
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      if (ev.key === 'Escape') { renderTodos(); }
+    });
+  });
+
+  // ── context menu (right-click) ────────────────────────────────────────────
+  list.addEventListener('contextmenu', e => {
+    const task = e.target.closest('.todo-task');
+    if (!task) return;
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, task.dataset.taskId);
+  });
+
+  // ── add task on Enter ─────────────────────────────────────────────────────
+  list.addEventListener('keydown', async e => {
+    if (e.key !== 'Enter') return;
+    const input = e.target.closest('.todo-input[data-class-id]');
+    if (!input) return;
+    const title = input.value.trim();
+    if (!title) return;
+    todoState.tasks.push({
+      id: genId(), classId: input.dataset.classId,
+      title, done: false, priority: 'none', dueDate: null, createdAt: Date.now()
+    });
+    input.value = '';
+    await saveTodoState(); renderTodos();
+    const rerendered = list.querySelector(`.todo-input[data-class-id="${input.dataset.classId}"]`);
+    if (rerendered) rerendered.focus();
+  });
+
+  // ── drag-to-reorder classes ───────────────────────────────────────────────
+  list.addEventListener('dragstart', e => {
+    const row = e.target.closest('.todo-class-row[draggable]');
+    if (!row) return;
+    _dragSrcClassId = row.closest('.todo-class')?.dataset.classId ?? null;
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  list.addEventListener('dragover', e => {
+    if (!_dragSrcClassId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+
+  list.addEventListener('drop', async e => {
+    e.preventDefault();
+    const row = e.target.closest('.todo-class-row');
+    if (!row || !_dragSrcClassId) return;
+    const targetId = row.closest('.todo-class')?.dataset.classId;
+    if (!targetId || targetId === _dragSrcClassId) return;
+
+    const srcIdx = todoState.classes.findIndex(c => c.id === _dragSrcClassId);
+    const tgtIdx = todoState.classes.findIndex(c => c.id === targetId);
+    if (srcIdx < 0 || tgtIdx < 0) return;
+
+    const [moved] = todoState.classes.splice(srcIdx, 1);
+    todoState.classes.splice(tgtIdx, 0, moved);
+    await saveTodoState(); renderTodos();
+    _dragSrcClassId = null;
+  });
+
+  list.addEventListener('dragend', () => { _dragSrcClassId = null; });
+}
+
+// ── End todo list ─────────────────────────────────────────────────────────────
+
 function enableDynamicBackground() {
   const root = document.documentElement;
   const lerp = 0.05;
@@ -834,12 +1139,110 @@ function enableDynamicBackground() {
 
 
 
+// ── Ollama AI Summary ─────────────────────────────────────────────────────────
+
+const OLLAMA_MODEL = 'llama3.2:1b';
+
+function buildOllamaPrompt() {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const pendingByClass = todoState.classes.map(cls => {
+    const pending = todoState.tasks.filter(t => t.classId === cls.id && !t.done);
+    if (!pending.length) return null;
+    return `${cls.name}: ${pending.map(t => {
+      let s = t.title;
+      if (t.priority && t.priority !== 'none') s += ` [${t.priority}]`;
+      if (t.dueDate) s += ` (due ${t.dueDate})`;
+      return s;
+    }).join(', ')}`;
+  }).filter(Boolean);
+
+  const taskSection = pendingByClass.length
+    ? pendingByClass.join('\n')
+    : 'No pending tasks.';
+
+  return `Today is ${dateStr} at ${timeStr}.\n\nMy pending tasks:\n${taskSection}\n\n In order of whats coming, give me a brief summary of what I have to do and make sure to state each task in a new line with ✦ in front, and give the date for each one if its given and also give a bit of encouragement on each task. Be concise.`;
+}
+
+async function streamOllamaSummary() {
+  const textEl  = document.getElementById('ollamaText');
+  const spinner = document.getElementById('ollamaSpinner');
+  textEl.textContent = '';
+  spinner.classList.remove('hidden');
+
+  try {
+    const resp = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: OLLAMA_MODEL, prompt: buildOllamaPrompt(), stream: true })
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value).split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line);
+          if (data.response) textEl.textContent += data.response;
+          if (data.done) { spinner.classList.add('hidden'); return; }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    const hint = err.message.includes('403')
+      ? `Ollama is running but blocked this origin.\nFix: restart Ollama with\nOLLAMA_ORIGINS="*" ollama serve`
+      : `Could not reach Ollama — is it running?\n(${err.message})`;
+    textEl.textContent = hint;
+  }
+  spinner.classList.add('hidden');
+}
+
+function initOllamaSummary() {
+  const toggle      = document.getElementById('ollamaToggle');
+  const panel       = document.getElementById('ollamaPanel');
+  const todoSection = document.getElementById('todoSection');
+  const opts        = toggle.querySelectorAll('.ollama-toggle-opt');
+
+  function apply(isOn, stream) {
+    opts.forEach(o => o.classList.toggle('active', o.dataset.side === (isOn ? 'ai' : 'tasks')));
+    panel.classList.toggle('hidden', !isOn);
+    todoSection.classList.toggle('hidden', isOn);
+    if (isOn && stream) streamOllamaSummary();
+  }
+
+  // Restore persisted state
+  const persisted = localStorage.getItem('ollamaOn') === 'true';
+  apply(persisted, persisted);
+
+  toggle.addEventListener('click', e => {
+    const opt = e.target.closest('.ollama-toggle-opt');
+    if (!opt) return;
+    const isOn = opt.dataset.side === 'ai';
+    localStorage.setItem('ollamaOn', isOn);
+    apply(isOn, true);
+  });
+}
+
+// ── End Ollama summary ────────────────────────────────────────────────────────
+
 (async function init() {
   const state = await loadState();
   renderLinks(state.links);
   startClock();
+  await loadTodoState();
+  renderTodos();
+  initTodos();
   initSplashCursor();
   enableDynamicBackground();
+  initOllamaSummary();
   const greetingEl = document.getElementById("greeting");
   if (greetingEl) {
     greetingEl.textContent = getRandomGreeting();

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Dashboard</title>
     <link rel="stylesheet" href="newtab.css" />
-    <link rel="icon" type="image/png" href="assets/chop.png" />
+    <link rel="icon" href="assets/empty.png" />
     <script src="newtab.js" defer></script>
   </head>
   <body>
@@ -25,13 +25,37 @@
       <section class="card">
         <div id="links" class="grid"></div>
       </section>
+
+      <div id="todoOrAi">
+        <section id="todoSection" class="card todo-section">
+          <div class="todo-header">
+            <span class="todo-title">tasks</span>
+          </div>
+          <div id="todoList"></div>
+        </section>
+
+        <section id="ollamaPanel" class="card todo-section ollama-panel hidden">
+          <div class="ollama-header">
+            <span class="ollama-icon">✦</span>
+            <span class="ollama-title">AI</span>
+            <span id="ollamaSpinner" class="ollama-spinner hidden"></span>
+          </div>
+          <div class="ollama-divider"></div>
+          <div id="ollamaText" class="ollama-text"></div>
+        </section>
+      </div>
+
       <footer class="bottom">
-      <div class="actions">
+        <div class="actions">
           <form id="bingForm" class="searchForm">
             <input id="bingQ" class="search" placeholder="bing." />
           </form>
         </div>
-        </footer>
+      </footer>
     </main>
+    <div id="ollamaToggle" class="ollama-toggle">
+      <span class="ollama-toggle-opt active" data-side="tasks">tasks</span>
+      <span class="ollama-toggle-opt" data-side="ai">AI summary</span>
+    </div>
   </body>
 </html>

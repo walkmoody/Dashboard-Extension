@@ -13,6 +13,7 @@
 }
 
 * { box-sizing: border-box; }
+.hidden { display: none !important; }
 html, body { height: 100%; }
 
 #fluid-canvas {
@@ -20,7 +21,7 @@ html, body { height: 100%; }
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 50;
+  z-index: 1;
   pointer-events: none;
   display: block;
 }
@@ -64,6 +65,8 @@ body {
   padding: clamp(28px, 8vw, 120px);
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 2;
 }
 
 .top {
@@ -231,4 +234,334 @@ code { color: rgba(255,255,255,0.85); }
   align-items: center;
   margin-top: auto;
   margin-bottom: 15px;
+}
+
+/* ── Todo list ────────────────────────────────────────────────────────────── */
+
+.todo-section {
+  width: min(420px, 70vw);
+  margin: 14px auto 0;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: rgba(8, 12, 22, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.todo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.todo-title {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.todo-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.07);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.todo-input:focus { border-color: rgba(255,255,255,0.22); }
+.todo-input::placeholder { color: var(--muted); }
+
+#todoList {
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+
+.todo-class { margin-bottom: 2px; }
+
+.todo-class-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+.todo-class-row:hover { background: rgba(255,255,255,0.07); }
+
+.todo-class-icon {
+  color: #4A7BF7;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.todo-class-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.todo-badge {
+  font-size: 11px;
+  background: rgba(74,123,247,0.25);
+  color: #7aa7ff;
+  padding: 1px 7px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+
+.todo-del-class {
+  opacity: 0;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+  transition: opacity 0.1s;
+}
+.todo-class-row:hover .todo-del-class { opacity: 0.5; }
+.todo-del-class:hover { opacity: 1 !important; }
+
+.todo-tasks {
+  padding: 2px 0 4px 28px;
+}
+.todo-tasks.hidden { display: none; }
+
+.todo-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.todo-task:hover { background: rgba(255,255,255,0.04); }
+
+.todo-task-toggle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: border-color 0.12s, background 0.12s;
+}
+.todo-task-toggle:hover { border-color: rgba(255,255,255,0.7); }
+.todo-task.done .todo-task-toggle {
+  background: rgba(74,123,247,0.6);
+  border-color: #4A7BF7;
+}
+
+.todo-task-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  cursor: text;
+}
+.todo-task.done .todo-task-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.todo-del-task {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0;
+  padding: 0 2px;
+  line-height: 1;
+}
+.todo-task:hover .todo-del-task { opacity: 0.5; }
+.todo-del-task:hover { opacity: 1 !important; }
+
+.todo-add-row { margin-top: 4px; }
+
+/* inline edit */
+.todo-inline-edit { width: 100%; }
+
+/* priority dot */
+.todo-priority-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* due date chip */
+.todo-due {
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(255,255,255,0.07);
+  padding: 1px 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* done collapsible */
+.todo-done-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 8px;
+  user-select: none;
+  margin-top: 4px;
+}
+.todo-done-header:hover { background: rgba(255,255,255,0.04); }
+.todo-done-arrow { font-size: 10px; }
+.todo-done-tasks.hidden { display: none; }
+
+/* context menu */
+.todo-context-menu {
+  position: fixed;
+  background: rgba(15, 20, 32, 0.96);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 160px;
+  z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.tcm-section {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 4px 8px 2px;
+}
+.tcm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  text-transform: capitalize;
+}
+.tcm-item:hover { background: rgba(255,255,255,0.08); }
+.tcm-item.active { background: rgba(74,123,247,0.2); }
+.tcm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.tcm-date {
+  width: calc(100% - 16px);
+  margin: 4px 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.07);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  color-scheme: dark;
+}
+
+/* ── Ollama AI Summary ──────────────────────────────────────────────────── */
+
+.ollama-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(15,20,32,0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ollama-toggle-opt {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.ollama-toggle-opt:hover { color: rgba(255,255,255,0.75); }
+.ollama-toggle-opt.active {
+  background: rgba(74,123,247,0.3);
+  color: #fff;
+}
+
+.ollama-panel.hidden { display: none; }
+
+#ollamaPanel {
+  border-color: rgba(74,123,247,0.18);
+}
+
+.ollama-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.ollama-icon {
+  font-size: 11px;
+  color: rgba(74,123,247,0.7);
+}
+
+.ollama-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.ollama-divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 10px;
+}
+
+.ollama-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(74,123,247,0.3);
+  border-top-color: #7aa7ff;
+  animation: ollama-spin 0.7s linear infinite;
+  margin-left: auto;
+}
+.ollama-spinner.hidden { display: none; }
+
+@keyframes ollama-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ollama-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.88);
+  white-space: pre-wrap;
+  min-height: 20px;
+  position: relative;
 }

@@ -10,6 +10,10 @@
     "default_title": "Open Dashboard"
   },
   "permissions": ["storage"],
+  "host_permissions": ["http://localhost:11434/*"],
+  "web_accessible_resources": [
+    { "resources": ["todos.json"], "matches": ["<all_urls>"] }
+  ],
   "background": {
     "service_worker": "background.js"
   }
